@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulateur d'Épargne</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial; margin: 20px;
+            background-image: url("fond.jpg");
+            background-size: cover;      
+            background-position: center;   
+            background-repeat: no-repeat;  }
+    h1 { color: #007b5e; }
+    label {  margin-top: 10px; }
+    input, select { width: 100%; padding: 8px; margin-top: 5px; }
+    button { margin-top: 20px; padding: 10px; border: none; cursor: pointer; }
+    .results, .compare { margin-top: 30px; padding: 20px; border-radius: 5px; }
+    .scenario { margin: 10px 0; padding: 10px; background-image: url("fond.jpg"); }
+    canvas { margin-top: 20px; }
+    .flex { display: flex; gap: 20px; flex-wrap: wrap; }
+    .card { flex: 1; min-width: 300px; background-image: url("fond.jpg"); padding: 15px; border-radius: 5px; }
+
+  </style>
+</head>
+<body>
+
+  <h1>Simulateur d'Épargne</h1>
+
+  <form id="formulaireEpargne">
+    <label>Type d'annuité :
+      <select id="typeAnnuite">
+        <option value="constante">Constante</option>
+        <option value="geometrique">Géométrique</option>
+      </select>
+    </label>
+
+    <label>Versement initial :
+      <input type="number" id="versementInitial" min="0" value="0">
+    </label>
+
+    <label>Montant du versement périodique :
+      <input type="number" id="versement" required>
+    </label>
+
+    <label>Taux d'intérêt annuel (%) :
+      <input type="number" id="taux" step="0.01" required>
+    </label>
+
+    <label>Durée (années) :
+      <input type="number" id="duree" required>
+    </label>
+
+    <label>Fréquence des versements :
+      <select id="frequence">
+        <option value="12">Mensuelle</option>
+        <option value="4">Trimestrielle</option>
+        <option value="1">Annuelle</option>
+      </select>
+    </label>
+
+    <label id="labelCroissance" style="display:none;">Taux de croissance des versements (%) :
+      <input type="number" id="croissance" step="0.01" value="0">
+    </label>
+
+    <button type="submit">Calculer</button>
+    <button type="button" onclick="sauvegarderScenario()">💾 Sauvegarder</button>
+  </form>
+
+  <div class="results" id="resultats"></div>
+  <canvas id="graphiqueCapital" width="600" height="300"></canvas>
+
+  <h2>📂 Scénarios sauvegardés</h2>
+  <div id="listeScenarios" class="scenario"></div>
+
+  <h2>📊 Comparaison de 2 scénarios</h2>
+  <div id="comparaison" class="flex compare"></div>
+
+  <script>
+    const typeSelect = document.getElementById("typeAnnuite");
+    const croissanceLabel = document.getElementById("labelCroissance");
+    const resultats = document.getElementById("resultats");
+    const formulaire = document.getElementById("formulaireEpargne");
+    const listeScenarios = document.getElementById("listeScenarios");
+    const comparaisonDiv = document.getElementById("comparaison");
+    let graphique;
+
+    typeSelect.addEventListener("change", () => {
+      croissanceLabel.style.display = typeSelect.value === "geometrique" ? "block" : "none";
+    });
+
+    formulaire.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const type = document.getElementById("typeAnnuite").value;
+      const versementInitial = parseFloat(document.getElementById("versementInitial").value);
+      const versement = parseFloat(document.getElementById("versement").value);
+      const taux = parseFloat(document.getElementById("taux").value) / 100;
+      const duree = parseInt(document.getElementById("duree").value);
+      const frequence = parseInt(document.getElementById("frequence").value);
+      const croissance = parseFloat(document.getElementById("croissance").value) / 100;
+
+      const data = (type === "constante")
+        ? calculConstante(versementInitial, versement, taux, duree, frequence)
+        : calculGeometrique(versementInitial, versement, taux, croissance, duree, frequence);
+
+      afficherResultats(data);
+      dessinerGraphique(data);
+    });
+
+    function calculConstante(init, versement, taux, duree, freq) {
+      const tp = taux / freq;
+      const n = duree * freq;
+      let capital = init;
+      let details = [];
+
+      for (let i = 1; i <= n; i++) {
+        capital *= 1 + tp;
+        capital += versement;
+        details.push({ periode: i, capital: parseFloat(capital.toFixed(2)) });
+      }
+      return details;
+    }
+
+    function calculGeometrique(init, v0, taux, croissance, duree, freq) {
+      const tp = taux / freq;
+      const gc = croissance / freq;
+      const n = duree * freq;
+      let capital = init;
+      let details = [];
+
+      for (let i = 0; i < n; i++) {
+        const versement = v0 * Math.pow(1 + gc, i);
+        capital *= 1 + tp;
+        capital += versement;
+        details.push({ periode: i + 1, capital: parseFloat(capital.toFixed(2)) });
+      }
+      return details;
+    }
+
+    function afficherResultats(data) {
+      const total = data[data.length - 1].capital;
+      resultats.innerHTML = `<h3>Capital final : ${total.toFixed(2)} MAD</h3>`;
+    }
+
+    function dessinerGraphique(data) {
+      const labels = data.map(p => `P${p.periode}`);
+      const valeurs = data.map(p => p.capital);
+
+      if (graphique) graphique.destroy();
+      const ctx = document.getElementById("graphiqueCapital").getContext("2d");
+
+      graphique = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Capital accumulé',
+            data: valeurs,
+            borderColor: '#007b5e',
+            backgroundColor: 'rgba(0,123,94,0.2)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: { responsive: true }
+      });
+    }
+
+    function sauvegarderScenario() {
+      const scenario = {
+        type: document.getElementById("typeAnnuite").value,
+        versementInitial: document.getElementById("versementInitial").value,
+        versement: document.getElementById("versement").value,
+        taux: document.getElementById("taux").value,
+        duree: document.getElementById("duree").value,
+        frequence: document.getElementById("frequence").value,
+        croissance: document.getElementById("croissance").value,
+        date: new Date().toLocaleString()
+      };
+
+      let scenarios = JSON.parse(localStorage.getItem("scenarios")) || [];
+      scenarios.push(scenario);
+      localStorage.setItem("scenarios", JSON.stringify(scenarios));
+      afficherScenarios();
+    }
+
+    function afficherScenarios() {
+      const scenarios = JSON.parse(localStorage.getItem("scenarios")) || [];
+      listeScenarios.innerHTML = "";
+
+      scenarios.forEach((s, i) => {
+        const div = document.createElement("div");
+        div.className = "card";
+        div.innerHTML = `
+          <strong>${s.type}</strong> – ${s.date}<br>
+          Versement : ${s.versement} – Taux : ${s.taux}% – Durée : ${s.duree} ans
+          <br><button onclick="comparer(${i})">Comparer</button>
+        `;
+        listeScenarios.appendChild(div);
+      });
+    }
+
+    let scenariosSelectionnes = [];
+
+    function comparer(index) {
+      const scenarios = JSON.parse(localStorage.getItem("scenarios")) || [];
+      if (scenariosSelectionnes.length >= 2) scenariosSelectionnes = [];
+      scenariosSelectionnes.push(scenarios[index]);
+      if (scenariosSelectionnes.length === 2) {
+        afficherComparaison();
+      }
+    }
+
+    function afficherComparaison() {
+      comparaisonDiv.innerHTML = "";
+      scenariosSelectionnes.forEach((s, idx) => {
+        const data = s.type === "constante"
+          ? calculConstante(+s.versementInitial, +s.versement, +s.taux / 100, +s.duree, +s.frequence)
+          : calculGeometrique(+s.versementInitial, +s.versement, +s.taux / 100, +s.croissance / 100, +s.duree, +s.frequence);
+
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <h4>Scénario ${idx + 1} – ${s.type}</h4>
+          <p>Versement: ${s.versement}<br>Taux: ${s.taux}%<br>Durée: ${s.duree} ans</p>
+          <p><strong>Capital final : ${data[data.length - 1].capital} MAD</strong></p>
+        `;
+        comparaisonDiv.appendChild(card);
+      });
+    }
+
+    afficherScenarios(); // charger les scénarios au démarrage
+  </script>
+
+</body>
+</html>
